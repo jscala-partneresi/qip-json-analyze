@@ -1,0 +1,859 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>PCA JSON Viewer</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg: #f0f2f5;
+      --surface: #ffffff;
+      --border: #d0d7de;
+      --text: #1f2328;
+      --text-secondary: #656d76;
+      --text-muted: #9198a1;
+
+      --green: #1a7f37; --green-bg: #dafbe1;
+      --amber: #9a6700; --amber-bg: #fff8c5;
+      --red:   #cf222e; --red-bg:   #ffebe9;
+      --blue:  #0969da; --blue-bg:  #ddf4ff;
+      --purple:#8250df; --purple-bg:#fbefff;
+
+      --radius: 6px;
+      --shadow: 0 1px 3px rgba(0,0,0,0.08), 0 0 0 1px rgba(0,0,0,0.04);
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      min-height: 100vh;
+    }
+
+    /* ── Header ── */
+    .app-header {
+      background: #1f2328;
+      color: #fff;
+      padding: 14px 24px;
+      display: flex;
+      align-items: center;
+      gap: 20px;
+      flex-wrap: wrap;
+    }
+    .app-title { font-size: 17px; font-weight: 700; letter-spacing: -0.3px; }
+    .header-meta { display: flex; gap: 18px; flex-wrap: wrap; }
+    .header-meta .meta-item { font-size: 13px; color: #adbac7; }
+    .header-meta .meta-item strong { color: #e6edf3; font-weight: 600; }
+    .report-type-badge {
+      background: #388bfd22;
+      border: 1px solid #388bfd55;
+      color: #79c0ff;
+      border-radius: 12px;
+      padding: 2px 10px;
+      font-size: 12px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.6px;
+    }
+
+    /* ── Layout ── */
+    .main { max-width: 1100px; margin: 0 auto; padding: 20px 16px 48px; }
+
+    /* ── Stats bar ── */
+    .stats-bar { display: flex; gap: 10px; margin-bottom: 16px; flex-wrap: wrap; }
+    .stat-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 12px 18px;
+      flex: 1; min-width: 110px;
+      box-shadow: var(--shadow);
+    }
+    .stat-label { font-size: 11px; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.6px; font-weight: 600; }
+    .stat-value { font-size: 26px; font-weight: 800; margin-top: 2px; }
+    .stat-value.blue   { color: var(--blue); }
+    .stat-value.green  { color: var(--green); }
+    .stat-value.amber  { color: var(--amber); }
+    .stat-value.purple { color: var(--purple); }
+
+    /* ── Controls bar ── */
+    .controls {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 10px 14px;
+      margin-bottom: 14px;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      flex-wrap: wrap;
+      box-shadow: var(--shadow);
+    }
+    .search-wrap { flex: 1; min-width: 180px; position: relative; }
+    .search-wrap svg { position: absolute; left: 9px; top: 50%; transform: translateY(-50%); color: var(--text-muted); pointer-events: none; }
+    .search-wrap input {
+      width: 100%;
+      padding: 7px 12px 7px 32px;
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      font-size: 14px;
+      background: var(--bg);
+      outline: none;
+      transition: border-color 0.15s, box-shadow 0.15s;
+    }
+    .search-wrap input:focus { border-color: var(--blue); box-shadow: 0 0 0 3px #0969da22; }
+
+    .filter-group { display: flex; gap: 5px; align-items: center; }
+    .filter-label { font-size: 12px; color: var(--text-muted); }
+    .filter-btn {
+      padding: 5px 13px;
+      border-radius: 20px;
+      border: 1px solid var(--border);
+      background: var(--surface);
+      cursor: pointer;
+      font-size: 12px;
+      font-weight: 600;
+      transition: all 0.15s;
+      color: var(--text-secondary);
+    }
+    .filter-btn:hover { background: var(--bg); }
+    .filter-btn.active { background: #1f2328; color: #fff; border-color: #1f2328; }
+    .filter-btn.active.f-extracted { background: var(--green); border-color: var(--green); }
+    .filter-btn.active.f-missing   { background: var(--amber); border-color: var(--amber); }
+
+    .btn {
+      padding: 6px 13px;
+      border-radius: var(--radius);
+      border: 1px solid var(--border);
+      background: var(--surface);
+      cursor: pointer;
+      font-size: 13px;
+      font-weight: 500;
+      color: var(--text);
+      transition: background 0.12s;
+    }
+    .btn:hover { background: var(--bg); }
+    .btn-primary { background: var(--blue); color: #fff; border-color: var(--blue); }
+    .btn-primary:hover { background: #0860ca; }
+
+    /* ── JSON paste panel ── */
+    .json-panel {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      margin-bottom: 14px;
+      overflow: hidden;
+      display: none;
+      box-shadow: var(--shadow);
+    }
+    .json-panel.open { display: block; }
+    .json-panel-header {
+      padding: 9px 14px;
+      background: #f6f8fa;
+      border-bottom: 1px solid var(--border);
+      font-size: 13px;
+      font-weight: 600;
+      color: var(--text-secondary);
+    }
+    .json-panel-body { padding: 12px; }
+    .json-panel textarea {
+      width: 100%; height: 160px;
+      font-family: 'SFMono-Regular', Consolas, monospace;
+      font-size: 12px;
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 8px;
+      resize: vertical;
+      background: var(--bg);
+    }
+    .json-panel-actions { margin-top: 8px; display: flex; gap: 8px; align-items: center; }
+    .json-error { color: var(--red); font-size: 13px; }
+
+    /* ── Field cards ── */
+    .field-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      margin-bottom: 10px;
+      overflow: hidden;
+      box-shadow: var(--shadow);
+    }
+    .field-card.hidden { display: none; }
+
+    .field-header {
+      padding: 11px 14px;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      cursor: pointer;
+      user-select: none;
+      transition: background 0.1s;
+    }
+    .field-header:hover { background: #f6f8fa; }
+
+    .field-number {
+      background: #e7ecf3;
+      color: var(--text-secondary);
+      border-radius: 4px;
+      padding: 1px 7px;
+      font-size: 11px;
+      font-weight: 700;
+      font-family: monospace;
+      flex-shrink: 0;
+      min-width: 28px;
+      text-align: center;
+    }
+    .field-label { font-weight: 600; font-size: 14px; flex: 1; }
+    .field-raw-key { font-size: 11px; color: var(--text-muted); font-family: monospace; flex-shrink: 0; }
+    .field-badges { display: flex; gap: 5px; flex-shrink: 0; }
+    .chevron { width: 15px; height: 15px; color: var(--text-muted); transition: transform 0.2s; flex-shrink: 0; }
+    .chevron.open { transform: rotate(90deg); }
+
+    .field-body { border-top: 1px solid var(--border); padding: 10px; display: flex; flex-direction: column; gap: 8px; }
+    .field-body.collapsed { display: none; }
+
+    /* ── Value items ── */
+    .value-item { border: 1px solid var(--border); border-radius: var(--radius); overflow: hidden; }
+    .value-header {
+      padding: 9px 12px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      background: #f6f8fa;
+      cursor: pointer;
+    }
+    .value-header:hover { background: #eef0f3; }
+    .value-text { font-family: 'SFMono-Regular', Consolas, monospace; font-size: 13px; font-weight: 600; flex: 1; }
+    .value-null { color: var(--text-muted); font-style: italic; font-weight: 400; }
+    .ev-count-btn {
+      font-size: 12px;
+      color: var(--text-secondary);
+      padding: 2px 9px;
+      border-radius: 12px;
+      border: 1px solid var(--border);
+      background: var(--surface);
+      cursor: pointer;
+      flex-shrink: 0;
+      white-space: nowrap;
+    }
+    .ev-count-btn:hover { background: var(--bg); }
+
+    /* ── Badges ── */
+    .badge {
+      display: inline-flex; align-items: center;
+      padding: 2px 8px; border-radius: 12px;
+      font-size: 11px; font-weight: 700; white-space: nowrap;
+      text-transform: uppercase; letter-spacing: 0.4px;
+    }
+    .badge-extracted { background: var(--green-bg); color: var(--green); }
+    .badge-missing   { background: var(--amber-bg); color: var(--amber); }
+    .badge-failed    { background: var(--red-bg);   color: var(--red); }
+    .badge-pending   { background: var(--blue-bg);  color: var(--blue); }
+    .badge-high      { background: var(--green-bg); color: var(--green); }
+    .badge-medium    { background: var(--amber-bg); color: var(--amber); }
+    .badge-low       { background: var(--red-bg);   color: var(--red); }
+    .badge-anchor    { background: var(--purple-bg); color: var(--purple); }
+    .badge-pdf_text_bbox { background: var(--blue-bg); color: var(--blue); }
+    .badge-image_bbox    { background: #fff3cd; color: #856404; }
+    .badge-gray      { background: #f1f3f5; color: var(--text-secondary); }
+
+    /* ── Evidence list ── */
+    .evidence-list { padding: 8px 10px; display: flex; flex-direction: column; gap: 6px; border-top: 1px solid var(--border); }
+    .evidence-list.collapsed { display: none; }
+
+    .ev-item { border: 1px solid var(--border); border-radius: var(--radius); overflow: hidden; font-size: 12px; }
+    .ev-item-header {
+      display: flex; align-items: center; gap: 7px; flex-wrap: wrap;
+      padding: 5px 10px;
+      background: #fafbfc;
+      border-bottom: 1px solid var(--border);
+    }
+    .ev-page {
+      font-family: monospace; font-size: 11px; font-weight: 700;
+      background: #e7ecf3; color: var(--text-secondary);
+      border-radius: 4px; padding: 1px 6px; flex-shrink: 0;
+    }
+    .ev-file {
+      font-size: 11px; color: var(--text-muted); font-family: monospace;
+      overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 220px;
+    }
+    .ev-item-body { padding: 7px 10px; }
+
+    .anchor-display { font-family: monospace; font-size: 12px; line-height: 1.8; word-break: break-all; }
+    .anchor-prefix { color: var(--text-muted); }
+    .anchor-exact {
+      background: #fff8c5; border: 1px solid #f0bc00;
+      border-radius: 3px; padding: 1px 4px;
+      color: #5c4105; font-weight: 700;
+    }
+    .anchor-suffix { color: var(--text-muted); }
+
+    .bbox-toggle {
+      margin-top: 5px; font-size: 11px; color: var(--blue);
+      cursor: pointer; text-decoration: underline; display: inline-block;
+    }
+    .bbox-container { display: none; margin-top: 4px; }
+    .bbox-container.open { display: block; }
+    .bbox-table { border-collapse: collapse; width: 100%; font-family: monospace; font-size: 11px; }
+    .bbox-table th { text-align: right; color: var(--text-muted); padding: 2px 8px; font-weight: 600; border-bottom: 1px solid var(--border); }
+    .bbox-table th:first-child { text-align: left; }
+    .bbox-table td { padding: 2px 8px; text-align: right; color: var(--text-secondary); }
+    .bbox-table td:first-child { text-align: left; font-weight: 600; color: var(--text-muted); }
+    .bbox-table tr:nth-child(even) td { background: #f6f8fa; }
+
+    /* ── Empty / no results ── */
+    .empty { text-align: center; padding: 48px 16px; color: var(--text-muted); font-size: 15px; }
+
+    /* ── Scrollbar ── */
+    ::-webkit-scrollbar { width: 6px; height: 6px; }
+    ::-webkit-scrollbar-track { background: var(--bg); }
+    ::-webkit-scrollbar-thumb { background: #ccc; border-radius: 3px; }
+  </style>
+</head>
+<body>
+
+<header class="app-header">
+  <div class="app-title">PCA JSON Viewer</div>
+  <div id="header-meta" class="header-meta"></div>
+</header>
+
+<div class="main">
+  <div class="stats-bar" id="stats-bar"></div>
+
+  <!-- Controls -->
+  <div class="controls">
+    <div class="search-wrap">
+      <svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor">
+        <path d="M11.742 10.344a6.5 6.5 0 1 0-1.397 1.398h-.001c.03.04.062.078.098.115l3.85 3.85a1 1 0 0 0 1.415-1.414l-3.85-3.85a1.007 1.007 0 0 0-.115-.099zm-5.242 1.656a5 5 0 1 1 0-10 5 5 0 0 1 0 10z"/>
+      </svg>
+      <input type="search" id="search-input" placeholder="Search field names or values…" oninput="applyFilters()">
+    </div>
+    <div class="filter-group">
+      <span class="filter-label">Status:</span>
+      <button class="filter-btn active" data-filter="all" onclick="setFilter(this)">All</button>
+      <button class="filter-btn f-extracted" data-filter="extracted" onclick="setFilter(this)">Extracted</button>
+      <button class="filter-btn f-missing"   data-filter="missing"   onclick="setFilter(this)">Missing</button>
+    </div>
+    <button class="btn" onclick="expandAll()">Expand All</button>
+    <button class="btn" onclick="collapseAll()">Collapse All</button>
+    <button class="btn btn-primary" onclick="toggleJsonPanel()">Load JSON</button>
+  </div>
+
+  <!-- JSON paste panel -->
+  <div class="json-panel" id="json-panel">
+    <div class="json-panel-header">Paste JSON data</div>
+    <div class="json-panel-body">
+      <textarea id="json-input" placeholder="Paste your JSON here and click Load…"></textarea>
+      <div class="json-panel-actions">
+        <button class="btn btn-primary" onclick="loadJson()">Load</button>
+        <button class="btn" onclick="toggleJsonPanel()">Cancel</button>
+        <span class="json-error" id="json-error"></span>
+      </div>
+    </div>
+  </div>
+
+  <!-- Field cards -->
+  <div id="fields-container"></div>
+</div>
+
+<!-- ── Default data ── -->
+<script id="default-data" type="application/json">
+{
+  "report_type": "zoning",
+  "project_id": null,
+  "scope_id": null,
+  "pca_data_items": {
+    "10_parcel_number": [
+      {
+        "value": "01-0207-000-1050",
+        "status": "extracted",
+        "confidence": "high",
+        "evidence": [
+          {
+            "source_file_id": "file-BJhtzdQQ3eTR8NyRfhsJLL",
+            "source_filename": "4rkeij7b7udxkexo0g9qmph9m7nx.pdf",
+            "page": 503,
+            "evidence_type": "text_anchor",
+            "anchor": { "exact": "01-0207-000-1050", "prefix": "FOLIO:", "suffix": " /01/0207/000/1060/01/0207/000-1070" },
+            "pdf_bboxes": null, "image_bboxes": null, "figure_ref": null, "confidence": null, "notes": null
+          },
+          {
+            "source_file_id": "file-BJhtzdQQ3eTR8NyRfhsJLL",
+            "source_filename": "4rkeij7b7udxkexo0g9qmph9m7nx.pdf",
+            "page": 497,
+            "evidence_type": "pdf_text_bbox",
+            "anchor": { "exact": "01-0207-000-1050", "prefix": "FOLIO:", "suffix": " /01/0207/000/1060/01/0207/000-1070" },
+            "pdf_bboxes": [
+              {"x0":79.15,"y0":357.68,"x1":177.79,"y1":374.82},
+              {"x0":100.46,"y0":440.48,"x1":199.02,"y1":457.62},
+              {"x0":100.46,"y0":495.68,"x1":199.02,"y1":512.82}
+            ],
+            "image_bboxes": null, "figure_ref": null, "confidence": null, "notes": null
+          },
+          {
+            "source_file_id": "file-BJhtzdQQ3eTR8NyRfhsJLL",
+            "source_filename": "4rkeij7b7udxkexo0g9qmph9m7nx.pdf",
+            "page": 503,
+            "evidence_type": "pdf_text_bbox",
+            "anchor": { "exact": "01-0207-000-1050", "prefix": "FOLIO:", "suffix": " /01/0207/000/1060/01/0207/000-1070" },
+            "pdf_bboxes": [
+              {"x0":79.15,"y0":357.68,"x1":177.79,"y1":374.82},
+              {"x0":100.46,"y0":440.48,"x1":199.02,"y1":457.62},
+              {"x0":100.46,"y0":495.68,"x1":199.02,"y1":512.82}
+            ],
+            "image_bboxes": null, "figure_ref": null, "confidence": null, "notes": null
+          }
+        ],
+        "requires_visual_extraction": false,
+        "visual_task": null, "visual_reason": null, "validation_errors": []
+      },
+      {
+        "value": "01-0207-000-1060",
+        "status": "extracted",
+        "confidence": "high",
+        "evidence": [
+          { "source_file_id": "file-BJhtzdQQ3eTR8NyRfhsJLL", "source_filename": "4rkeij7b7udxkexo0g9qmph9m7nx.pdf", "page": 499, "evidence_type": "text_anchor", "anchor": { "exact": "01-0207-000-1060", "prefix": "/01-0207-000-1050/", "suffix": "/01/0207/000-1070" }, "pdf_bboxes": null, "image_bboxes": null, "figure_ref": null, "confidence": null, "notes": null },
+          { "source_file_id": "file-BJhtzdQQ3eTR8NyRfhsJLL", "source_filename": "4rkeij7b7udxkexo0g9qmph9m7nx.pdf", "page": 19,  "evidence_type": "pdf_text_bbox", "anchor": { "exact": "01-0207-000-1060", "prefix": "/01-0207-000-1050/", "suffix": "/01/0207/000-1070" }, "pdf_bboxes": [{"x0":1306.18,"y0":394.39,"x1":1388.45,"y1":411.42}], "image_bboxes": null, "figure_ref": null, "confidence": null, "notes": null },
+          { "source_file_id": "file-BJhtzdQQ3eTR8NyRfhsJLL", "source_filename": "4rkeij7b7udxkexo0g9qmph9m7nx.pdf", "page": 26,  "evidence_type": "pdf_text_bbox", "anchor": { "exact": "01-0207-000-1060", "prefix": "/01-0207-000-1050/", "suffix": "/01/0207/000-1070" }, "pdf_bboxes": [{"x0":347.78,"y0":236.45,"x1":451.48,"y1":249.05}], "image_bboxes": null, "figure_ref": null, "confidence": null, "notes": null },
+          { "source_file_id": "file-BJhtzdQQ3eTR8NyRfhsJLL", "source_filename": "4rkeij7b7udxkexo0g9qmph9m7nx.pdf", "page": 44,  "evidence_type": "pdf_text_bbox", "anchor": { "exact": "01-0207-000-1060", "prefix": "/01-0207-000-1050/", "suffix": "/01/0207/000-1070" }, "pdf_bboxes": [{"x0":74.16,"y0":285.20,"x1":124.31,"y1":293.20}], "image_bboxes": null, "figure_ref": null, "confidence": null, "notes": null },
+          { "source_file_id": "file-BJhtzdQQ3eTR8NyRfhsJLL", "source_filename": "4rkeij7b7udxkexo0g9qmph9m7nx.pdf", "page": 45,  "evidence_type": "pdf_text_bbox", "anchor": { "exact": "01-0207-000-1060", "prefix": "/01-0207-000-1050/", "suffix": "/01/0207/000-1070" }, "pdf_bboxes": [{"x0":77.64,"y0":168.26,"x1":176.17,"y1":186.18}], "image_bboxes": null, "figure_ref": null, "confidence": null, "notes": null },
+          { "source_file_id": "file-BJhtzdQQ3eTR8NyRfhsJLL", "source_filename": "4rkeij7b7udxkexo0g9qmph9m7nx.pdf", "page": 146, "evidence_type": "pdf_text_bbox", "anchor": { "exact": "01-0207-000-1060", "prefix": "/01-0207-000-1050/", "suffix": "/01/0207/000-1070" }, "pdf_bboxes": [{"x0":237.59,"y0":203.65,"x1":321.44,"y1":213.85}], "image_bboxes": null, "figure_ref": null, "confidence": null, "notes": null },
+          { "source_file_id": "file-BJhtzdQQ3eTR8NyRfhsJLL", "source_filename": "4rkeij7b7udxkexo0g9qmph9m7nx.pdf", "page": 211, "evidence_type": "pdf_text_bbox", "anchor": { "exact": "01-0207-000-1060", "prefix": "/01-0207-000-1050/", "suffix": "/01/0207/000-1070" }, "pdf_bboxes": [{"x0":267.01,"y0":319.68,"x1":375.44,"y1":330.91}], "image_bboxes": null, "figure_ref": null, "confidence": null, "notes": null },
+          { "source_file_id": "file-BJhtzdQQ3eTR8NyRfhsJLL", "source_filename": "4rkeij7b7udxkexo0g9qmph9m7nx.pdf", "page": 217, "evidence_type": "pdf_text_bbox", "anchor": { "exact": "01-0207-000-1060", "prefix": "/01-0207-000-1050/", "suffix": "/01/0207/000-1070" }, "pdf_bboxes": [{"x0":2072.18,"y0":381.92,"x1":2154.42,"y1":398.96}], "image_bboxes": null, "figure_ref": null, "confidence": null, "notes": null },
+          { "source_file_id": "file-BJhtzdQQ3eTR8NyRfhsJLL", "source_filename": "4rkeij7b7udxkexo0g9qmph9m7nx.pdf", "page": 218, "evidence_type": "pdf_text_bbox", "anchor": { "exact": "01-0207-000-1060", "prefix": "/01-0207-000-1050/", "suffix": "/01/0207/000-1070" }, "pdf_bboxes": [{"x0":1306.18,"y0":394.39,"x1":1388.43,"y1":411.42}], "image_bboxes": null, "figure_ref": null, "confidence": null, "notes": null },
+          { "source_file_id": "file-BJhtzdQQ3eTR8NyRfhsJLL", "source_filename": "4rkeij7b7udxkexo0g9qmph9m7nx.pdf", "page": 222, "evidence_type": "pdf_text_bbox", "anchor": { "exact": "01-0207-000-1060", "prefix": "/01-0207-000-1050/", "suffix": "/01/0207/000-1070" }, "pdf_bboxes": [{"x0":2072.18,"y0":381.92,"x1":2154.44,"y1":398.96}], "image_bboxes": null, "figure_ref": null, "confidence": null, "notes": null },
+          { "source_file_id": "file-BJhtzdQQ3eTR8NyRfhsJLL", "source_filename": "4rkeij7b7udxkexo0g9qmph9m7nx.pdf", "page": 229, "evidence_type": "pdf_text_bbox", "anchor": { "exact": "01-0207-000-1060", "prefix": "/01-0207-000-1050/", "suffix": "/01/0207/000-1070" }, "pdf_bboxes": [{"x0":349.63,"y0":138.15,"x1":438.23,"y1":149.19}], "image_bboxes": null, "figure_ref": null, "confidence": null, "notes": null },
+          { "source_file_id": "file-BJhtzdQQ3eTR8NyRfhsJLL", "source_filename": "4rkeij7b7udxkexo0g9qmph9m7nx.pdf", "page": 258, "evidence_type": "pdf_text_bbox", "anchor": { "exact": "01-0207-000-1060", "prefix": "/01-0207-000-1050/", "suffix": "/01/0207/000-1070" }, "pdf_bboxes": [{"x0":1306.18,"y0":394.39,"x1":1388.45,"y1":411.42}], "image_bboxes": null, "figure_ref": null, "confidence": null, "notes": null },
+          { "source_file_id": "file-BJhtzdQQ3eTR8NyRfhsJLL", "source_filename": "4rkeij7b7udxkexo0g9qmph9m7nx.pdf", "page": 259, "evidence_type": "pdf_text_bbox", "anchor": { "exact": "01-0207-000-1060", "prefix": "/01-0207-000-1050/", "suffix": "/01/0207/000-1070" }, "pdf_bboxes": [{"x0":2072.18,"y0":381.92,"x1":2154.45,"y1":398.96}], "image_bboxes": null, "figure_ref": null, "confidence": null, "notes": null },
+          { "source_file_id": "file-BJhtzdQQ3eTR8NyRfhsJLL", "source_filename": "4rkeij7b7udxkexo0g9qmph9m7nx.pdf", "page": 499, "evidence_type": "pdf_text_bbox", "anchor": { "exact": "01-0207-000-1060", "prefix": "/01-0207-000-1050/", "suffix": "/01/0207/000-1070" }, "pdf_bboxes": [{"x0":267.01,"y0":319.68,"x1":375.44,"y1":330.91}], "image_bboxes": null, "figure_ref": null, "confidence": null, "notes": null }
+        ],
+        "requires_visual_extraction": false,
+        "visual_task": null, "visual_reason": null, "validation_errors": []
+      },
+      {
+        "value": "01-0207-000-1070",
+        "status": "extracted",
+        "confidence": "high",
+        "evidence": [
+          { "source_file_id": "file-BJhtzdQQ3eTR8NyRfhsJLL", "source_filename": "4rkeij7b7udxkexo0g9qmph9m7nx.pdf", "page": 499, "evidence_type": "text_anchor",    "anchor": { "exact": "01-0207-000-1070", "prefix": "/01-0207-000-1060/", "suffix": "" }, "pdf_bboxes": null, "image_bboxes": null, "figure_ref": null, "confidence": null, "notes": null },
+          { "source_file_id": "file-BJhtzdQQ3eTR8NyRfhsJLL", "source_filename": "4rkeij7b7udxkexo0g9qmph9m7nx.pdf", "page": 19,  "evidence_type": "pdf_text_bbox", "anchor": { "exact": "01-0207-000-1070", "prefix": "/01-0207-000-1060/", "suffix": "" }, "pdf_bboxes": [{"x0":1306.18,"y0":408.45,"x1":1388.45,"y1":425.49}], "image_bboxes": null, "figure_ref": null, "confidence": null, "notes": null },
+          { "source_file_id": "file-BJhtzdQQ3eTR8NyRfhsJLL", "source_filename": "4rkeij7b7udxkexo0g9qmph9m7nx.pdf", "page": 26,  "evidence_type": "pdf_text_bbox", "anchor": { "exact": "01-0207-000-1070", "prefix": "/01-0207-000-1060/", "suffix": "" }, "pdf_bboxes": [{"x0":483.02,"y0":236.45,"x1":586.71,"y1":249.05}], "image_bboxes": null, "figure_ref": null, "confidence": null, "notes": null },
+          { "source_file_id": "file-BJhtzdQQ3eTR8NyRfhsJLL", "source_filename": "4rkeij7b7udxkexo0g9qmph9m7nx.pdf", "page": 44,  "evidence_type": "pdf_text_bbox", "anchor": { "exact": "01-0207-000-1070", "prefix": "/01-0207-000-1060/", "suffix": "" }, "pdf_bboxes": [{"x0":74.16,"y0":294.80,"x1":127.44,"y1":302.80}], "image_bboxes": null, "figure_ref": null, "confidence": null, "notes": null },
+          { "source_file_id": "file-BJhtzdQQ3eTR8NyRfhsJLL", "source_filename": "4rkeij7b7udxkexo0g9qmph9m7nx.pdf", "page": 45,  "evidence_type": "pdf_text_bbox", "anchor": { "exact": "01-0207-000-1070", "prefix": "/01-0207-000-1060/", "suffix": "" }, "pdf_bboxes": [{"x0":77.64,"y0":248.60,"x1":176.17,"y1":266.52}], "image_bboxes": null, "figure_ref": null, "confidence": null, "notes": null },
+          { "source_file_id": "file-BJhtzdQQ3eTR8NyRfhsJLL", "source_filename": "4rkeij7b7udxkexo0g9qmph9m7nx.pdf", "page": 146, "evidence_type": "pdf_text_bbox", "anchor": { "exact": "01-0207-000-1070", "prefix": "/01-0207-000-1060/", "suffix": "" }, "pdf_bboxes": [{"x0":346.98,"y0":203.65,"x1":430.83,"y1":213.85}], "image_bboxes": null, "figure_ref": null, "confidence": null, "notes": null },
+          { "source_file_id": "file-BJhtzdQQ3eTR8NyRfhsJLL", "source_filename": "4rkeij7b7udxkexo0g9qmph9m7nx.pdf", "page": 186, "evidence_type": "pdf_text_bbox", "anchor": { "exact": "01-0207-000-1070", "prefix": "/01-0207-000-1060/", "suffix": "" }, "pdf_bboxes": [{"x0":426.58,"y0":293.09,"x1":517.10,"y1":304.07}], "image_bboxes": null, "figure_ref": null, "confidence": null, "notes": null },
+          { "source_file_id": "file-BJhtzdQQ3eTR8NyRfhsJLL", "source_filename": "4rkeij7b7udxkexo0g9qmph9m7nx.pdf", "page": 211, "evidence_type": "pdf_text_bbox", "anchor": { "exact": "01-0207-000-1070", "prefix": "/01-0207-000-1060/", "suffix": "" }, "pdf_bboxes": [{"x0":408.61,"y0":319.68,"x1":517.04,"y1":330.91}], "image_bboxes": null, "figure_ref": null, "confidence": null, "notes": null },
+          { "source_file_id": "file-BJhtzdQQ3eTR8NyRfhsJLL", "source_filename": "4rkeij7b7udxkexo0g9qmph9m7nx.pdf", "page": 217, "evidence_type": "pdf_text_bbox", "anchor": { "exact": "01-0207-000-1070", "prefix": "/01-0207-000-1060/", "suffix": "" }, "pdf_bboxes": [{"x0":2072.18,"y0":395.98,"x1":2154.42,"y1":413.02}], "image_bboxes": null, "figure_ref": null, "confidence": null, "notes": null },
+          { "source_file_id": "file-BJhtzdQQ3eTR8NyRfhsJLL", "source_filename": "4rkeij7b7udxkexo0g9qmph9m7nx.pdf", "page": 218, "evidence_type": "pdf_text_bbox", "anchor": { "exact": "01-0207-000-1070", "prefix": "/01-0207-000-1060/", "suffix": "" }, "pdf_bboxes": [{"x0":1306.18,"y0":408.45,"x1":1388.43,"y1":425.49}], "image_bboxes": null, "figure_ref": null, "confidence": null, "notes": null },
+          { "source_file_id": "file-BJhtzdQQ3eTR8NyRfhsJLL", "source_filename": "4rkeij7b7udxkexo0g9qmph9m7nx.pdf", "page": 499, "evidence_type": "pdf_text_bbox", "anchor": { "exact": "01-0207-000-1070", "prefix": "/01-0207-000-1060/", "suffix": "" }, "pdf_bboxes": [{"x0":408.61,"y0":319.68,"x1":517.04,"y1":330.91}], "image_bboxes": null, "figure_ref": null, "confidence": null, "notes": null }
+        ],
+        "requires_visual_extraction": false,
+        "visual_task": null, "visual_reason": null, "validation_errors": []
+      }
+    ],
+    "1_property_address": [
+      {
+        "value": "132, 142, 152 SW 9TH STREET, MIAMI",
+        "status": "extracted",
+        "confidence": "high",
+        "evidence": [
+          { "source_file_id": "file-BJhtzdQQ3eTR8NyRfhsJLL", "source_filename": "4rkeij7b7udxkexo0g9qmph9m7nx.pdf", "page": 259, "evidence_type": "text_anchor",    "anchor": { "exact": "132, 142, 152 SW 9TH STREET, MIAMI", "prefix": "PROJECT ADDRESS ", "suffix": "" }, "pdf_bboxes": null, "image_bboxes": null, "figure_ref": null, "confidence": null, "notes": null },
+          { "source_file_id": "file-BJhtzdQQ3eTR8NyRfhsJLL", "source_filename": "4rkeij7b7udxkexo0g9qmph9m7nx.pdf", "page": 17,  "evidence_type": "pdf_text_bbox", "anchor": { "exact": "132, 142, 152 SW 9TH STREET, MIAMI", "prefix": "PROJECT ADDRESS ", "suffix": "" }, "pdf_bboxes": [{"x0":2821.72,"y0":832.49,"x1":2972.72,"y1":856.47},{"x0":2841.41,"y0":860.05,"x1":2953.41,"y1":884.03},{"x0":2870.47,"y0":887.61,"x1":2925.05,"y1":911.59}], "image_bboxes": null, "figure_ref": null, "confidence": null, "notes": null },
+          { "source_file_id": "file-BJhtzdQQ3eTR8NyRfhsJLL", "source_filename": "4rkeij7b7udxkexo0g9qmph9m7nx.pdf", "page": 18,  "evidence_type": "pdf_text_bbox", "anchor": { "exact": "132, 142, 152 SW 9TH STREET, MIAMI", "prefix": "PROJECT ADDRESS ", "suffix": "" }, "pdf_bboxes": [{"x0":2821.72,"y0":832.49,"x1":2972.72,"y1":856.47},{"x0":2841.41,"y0":860.05,"x1":2953.41,"y1":884.03},{"x0":2870.47,"y0":887.62,"x1":2925.05,"y1":911.60}], "image_bboxes": null, "figure_ref": null, "confidence": null, "notes": null },
+          { "source_file_id": "file-BJhtzdQQ3eTR8NyRfhsJLL", "source_filename": "4rkeij7b7udxkexo0g9qmph9m7nx.pdf", "page": 19,  "evidence_type": "pdf_text_bbox", "anchor": { "exact": "132, 142, 152 SW 9TH STREET, MIAMI", "prefix": "PROJECT ADDRESS ", "suffix": "" }, "pdf_bboxes": [{"x0":2821.72,"y0":832.49,"x1":2972.72,"y1":856.47},{"x0":2841.41,"y0":860.05,"x1":2953.41,"y1":884.03},{"x0":2870.47,"y0":887.62,"x1":2925.05,"y1":911.60}], "image_bboxes": null, "figure_ref": null, "confidence": null, "notes": null },
+          { "source_file_id": "file-BJhtzdQQ3eTR8NyRfhsJLL", "source_filename": "4rkeij7b7udxkexo0g9qmph9m7nx.pdf", "page": 46,  "evidence_type": "pdf_text_bbox", "anchor": { "exact": "132, 142, 152 SW 9TH STREET, MIAMI", "prefix": "PROJECT ADDRESS ", "suffix": "" }, "pdf_bboxes": [{"x0":2821.68,"y0":833.09,"x1":2973.97,"y1":853.15},{"x0":2841.36,"y0":860.63,"x1":2954.32,"y1":880.69},{"x0":2870.46,"y0":888.23,"x1":2925.36,"y1":908.29}], "image_bboxes": null, "figure_ref": null, "confidence": null, "notes": null },
+          { "source_file_id": "file-BJhtzdQQ3eTR8NyRfhsJLL", "source_filename": "4rkeij7b7udxkexo0g9qmph9m7nx.pdf", "page": 47,  "evidence_type": "pdf_text_bbox", "anchor": { "exact": "132, 142, 152 SW 9TH STREET, MIAMI", "prefix": "PROJECT ADDRESS ", "suffix": "" }, "pdf_bboxes": [{"x0":2821.73,"y0":832.49,"x1":2972.73,"y1":856.47},{"x0":2841.41,"y0":860.05,"x1":2953.41,"y1":884.03},{"x0":2870.48,"y0":887.61,"x1":2925.07,"y1":911.59}], "image_bboxes": null, "figure_ref": null, "confidence": null, "notes": null },
+          { "source_file_id": "file-BJhtzdQQ3eTR8NyRfhsJLL", "source_filename": "4rkeij7b7udxkexo0g9qmph9m7nx.pdf", "page": 95,  "evidence_type": "pdf_text_bbox", "anchor": { "exact": "132, 142, 152 SW 9TH STREET, MIAMI", "prefix": "PROJECT ADDRESS ", "suffix": "" }, "pdf_bboxes": [{"x0":2821.73,"y0":832.49,"x1":2972.73,"y1":856.47},{"x0":2841.41,"y0":860.05,"x1":2953.41,"y1":884.03},{"x0":2870.48,"y0":887.61,"x1":2925.07,"y1":911.59}], "image_bboxes": null, "figure_ref": null, "confidence": null, "notes": null },
+          { "source_file_id": "file-BJhtzdQQ3eTR8NyRfhsJLL", "source_filename": "4rkeij7b7udxkexo0g9qmph9m7nx.pdf", "page": 173, "evidence_type": "pdf_text_bbox", "anchor": { "exact": "132, 142, 152 SW 9TH STREET, MIAMI", "prefix": "PROJECT ADDRESS ", "suffix": "" }, "pdf_bboxes": [{"x0":2821.73,"y0":832.49,"x1":2972.73,"y1":856.47},{"x0":2841.41,"y0":860.05,"x1":2953.41,"y1":884.03},{"x0":2870.48,"y0":887.61,"x1":2925.07,"y1":911.59}], "image_bboxes": null, "figure_ref": null, "confidence": null, "notes": null },
+          { "source_file_id": "file-BJhtzdQQ3eTR8NyRfhsJLL", "source_filename": "4rkeij7b7udxkexo0g9qmph9m7nx.pdf", "page": 214, "evidence_type": "pdf_text_bbox", "anchor": { "exact": "132, 142, 152 SW 9TH STREET, MIAMI", "prefix": "PROJECT ADDRESS ", "suffix": "" }, "pdf_bboxes": [{"x0":2821.73,"y0":832.49,"x1":2972.73,"y1":856.47},{"x0":2841.41,"y0":860.05,"x1":2953.41,"y1":884.03},{"x0":2870.48,"y0":887.61,"x1":2925.07,"y1":911.59}], "image_bboxes": null, "figure_ref": null, "confidence": null, "notes": null },
+          { "source_file_id": "file-BJhtzdQQ3eTR8NyRfhsJLL", "source_filename": "4rkeij7b7udxkexo0g9qmph9m7nx.pdf", "page": 258, "evidence_type": "pdf_text_bbox", "anchor": { "exact": "132, 142, 152 SW 9TH STREET, MIAMI", "prefix": "PROJECT ADDRESS ", "suffix": "" }, "pdf_bboxes": [{"x0":2821.72,"y0":832.49,"x1":2972.72,"y1":856.47},{"x0":2841.41,"y0":860.05,"x1":2953.41,"y1":884.03},{"x0":2870.47,"y0":887.62,"x1":2925.05,"y1":911.60}], "image_bboxes": null, "figure_ref": null, "confidence": null, "notes": null },
+          { "source_file_id": "file-BJhtzdQQ3eTR8NyRfhsJLL", "source_filename": "4rkeij7b7udxkexo0g9qmph9m7nx.pdf", "page": 259, "evidence_type": "pdf_text_bbox", "anchor": { "exact": "132, 142, 152 SW 9TH STREET, MIAMI", "prefix": "PROJECT ADDRESS ", "suffix": "" }, "pdf_bboxes": [{"x0":2821.72,"y0":832.49,"x1":2972.72,"y1":856.47},{"x0":2841.41,"y0":860.05,"x1":2953.41,"y1":884.03},{"x0":2870.47,"y0":887.62,"x1":2925.05,"y1":911.60}], "image_bboxes": null, "figure_ref": null, "confidence": null, "notes": null }
+        ],
+        "requires_visual_extraction": false,
+        "visual_task": null, "visual_reason": null, "validation_errors": []
+      }
+    ],
+    "1a_add_additional_names": [
+      {
+        "value": null,
+        "status": "missing",
+        "confidence": null,
+        "evidence": [],
+        "requires_visual_extraction": false,
+        "visual_task": null, "visual_reason": null, "validation_errors": []
+      }
+    ],
+    "20_zoning_designation": [
+      {
+        "value": "RTZ",
+        "status": "extracted",
+        "confidence": "high",
+        "evidence": [
+          { "source_file_id": "file-BJhtzdQQ3eTR8NyRfhsJLL", "source_filename": "4rkeij7b7udxkexo0g9qmph9m7nx.pdf", "page": 259, "evidence_type": "text_anchor",    "anchor": { "exact": "RTZ ZONING APPLIED", "prefix": "", "suffix": "SITE INFORMATION" }, "pdf_bboxes": null, "image_bboxes": null, "figure_ref": null, "confidence": null, "notes": null },
+          { "source_file_id": "file-BJhtzdQQ3eTR8NyRfhsJLL", "source_filename": "4rkeij7b7udxkexo0g9qmph9m7nx.pdf", "page": 19,  "evidence_type": "pdf_text_bbox", "anchor": { "exact": "RTZ ZONING APPLIED", "prefix": "", "suffix": "SITE INFORMATION" }, "pdf_bboxes": [{"x0":1400.38,"y0":521.89,"x1":1506.51,"y1":538.92}], "image_bboxes": null, "figure_ref": null, "confidence": null, "notes": null },
+          { "source_file_id": "file-BJhtzdQQ3eTR8NyRfhsJLL", "source_filename": "4rkeij7b7udxkexo0g9qmph9m7nx.pdf", "page": 217, "evidence_type": "pdf_text_bbox", "anchor": { "exact": "RTZ ZONING APPLIED", "prefix": "", "suffix": "SITE INFORMATION" }, "pdf_bboxes": [{"x0":2166.38,"y0":509.42,"x1":2272.53,"y1":526.45}], "image_bboxes": null, "figure_ref": null, "confidence": null, "notes": null },
+          { "source_file_id": "file-BJhtzdQQ3eTR8NyRfhsJLL", "source_filename": "4rkeij7b7udxkexo0g9qmph9m7nx.pdf", "page": 218, "evidence_type": "pdf_text_bbox", "anchor": { "exact": "RTZ ZONING APPLIED", "prefix": "", "suffix": "SITE INFORMATION" }, "pdf_bboxes": [{"x0":1400.38,"y0":521.89,"x1":1506.53,"y1":538.93}], "image_bboxes": null, "figure_ref": null, "confidence": null, "notes": null },
+          { "source_file_id": "file-BJhtzdQQ3eTR8NyRfhsJLL", "source_filename": "4rkeij7b7udxkexo0g9qmph9m7nx.pdf", "page": 258, "evidence_type": "pdf_text_bbox", "anchor": { "exact": "RTZ ZONING APPLIED", "prefix": "", "suffix": "SITE INFORMATION" }, "pdf_bboxes": [{"x0":1400.38,"y0":521.89,"x1":1506.51,"y1":538.92}], "image_bboxes": null, "figure_ref": null, "confidence": null, "notes": null },
+          { "source_file_id": "file-BJhtzdQQ3eTR8NyRfhsJLL", "source_filename": "4rkeij7b7udxkexo0g9qmph9m7nx.pdf", "page": 259, "evidence_type": "pdf_text_bbox", "anchor": { "exact": "RTZ ZONING APPLIED", "prefix": "", "suffix": "SITE INFORMATION" }, "pdf_bboxes": [{"x0":2166.38,"y0":509.42,"x1":2272.51,"y1":526.46}], "image_bboxes": null, "figure_ref": null, "confidence": null, "notes": null }
+        ],
+        "requires_visual_extraction": false,
+        "visual_task": null, "visual_reason": null, "validation_errors": []
+      }
+    ],
+    "20d_prop_dist": [
+      {
+        "value": null,
+        "status": "missing",
+        "confidence": null,
+        "evidence": [],
+        "requires_visual_extraction": false,
+        "visual_task": null, "visual_reason": null, "validation_errors": []
+      }
+    ],
+    "2_municipality": [
+      {
+        "value": "City of Miami",
+        "status": "extracted",
+        "confidence": "high",
+        "evidence": [
+          { "source_file_id": "file-BvLXqBfPCTyUDZ2pP4qEGo", "source_filename": "pjmlbsaqkag7v7cno70rlbz4yg0n.pdf", "page": 1, "evidence_type": "text_anchor",    "anchor": { "exact": "City of Miami", "prefix": "property is zoned Metromover Subzone of the Rapid Transit Zone within the", "suffix": "." }, "pdf_bboxes": null, "image_bboxes": null, "figure_ref": null, "confidence": null, "notes": null },
+          { "source_file_id": "file-BvLXqBfPCTyUDZ2pP4qEGo", "source_filename": "pjmlbsaqkag7v7cno70rlbz4yg0n.pdf", "page": 1, "evidence_type": "pdf_text_bbox", "anchor": { "exact": "City of Miami", "prefix": "property is zoned Metromover Subzone of the Rapid Transit Zone within the", "suffix": "." }, "pdf_bboxes": [{"x0":415.20,"y0":295.44,"x1":477.42,"y1":306.54},{"x0":261.65,"y0":423.24,"x1":323.72,"y1":434.34}], "image_bboxes": null, "figure_ref": null, "confidence": null, "notes": null }
+        ],
+        "requires_visual_extraction": false,
+        "visual_task": null, "visual_reason": null, "validation_errors": []
+      }
+    ],
+    "3_county": [
+      {
+        "value": "Miami-Dade County",
+        "status": "extracted",
+        "confidence": "high",
+        "evidence": [
+          { "source_file_id": "file-BvLXqBfPCTyUDZ2pP4qEGo", "source_filename": "pjmlbsaqkag7v7cno70rlbz4yg0n.pdf", "page": 1, "evidence_type": "text_anchor",    "anchor": { "exact": "Miami-Dade County", "prefix": "public records of ", "suffix": "." }, "pdf_bboxes": null, "image_bboxes": null, "figure_ref": null, "confidence": null, "notes": null },
+          { "source_file_id": "file-BvLXqBfPCTyUDZ2pP4qEGo", "source_filename": "pjmlbsaqkag7v7cno70rlbz4yg0n.pdf", "page": 1, "evidence_type": "pdf_text_bbox", "anchor": { "exact": "Miami-Dade County", "prefix": "public records of ", "suffix": "." }, "pdf_bboxes": [{"x0":448.02,"y0":352.92,"x1":536.77,"y1":364.02}], "image_bboxes": null, "figure_ref": null, "confidence": null, "notes": null }
+        ],
+        "requires_visual_extraction": false,
+        "visual_task": null, "visual_reason": null, "validation_errors": []
+      }
+    ]
+  },
+  "tables": {},
+  "source_files": [],
+  "generated_at": "2026-02-18T00:49:47.291259+00:00"
+}
+</script>
+
+<script>
+// ── Utilities ──────────────────────────────────────────────────────────────
+
+function esc(s) {
+  if (s == null) return '';
+  return String(s)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;');
+}
+
+function parseFieldKey(key) {
+  const m = key.match(/^(\d+[a-z]?)_(.+)$/);
+  if (m) {
+    const label = m[2].split('_').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ');
+    return { num: m[1], label, raw: key };
+  }
+  return { num: '', label: key, raw: key };
+}
+
+function statusBadge(status) {
+  const cls = { extracted: 'badge-extracted', missing: 'badge-missing', failed: 'badge-failed' }[status] || 'badge-gray';
+  return `<span class="badge ${cls}">${esc(status || '—')}</span>`;
+}
+
+function confBadge(conf) {
+  if (!conf) return '';
+  const cls = { high: 'badge-high', medium: 'badge-medium', low: 'badge-low' }[conf] || 'badge-gray';
+  return `<span class="badge ${cls}">${esc(conf)}</span>`;
+}
+
+function evTypeBadge(type) {
+  const cls = { text_anchor: 'badge-anchor', pdf_text_bbox: 'badge-pdf_text_bbox', image_bbox: 'badge-image_bbox' }[type] || 'badge-gray';
+  const label = { text_anchor: 'Anchor', pdf_text_bbox: 'PDF BBox', image_bbox: 'Image BBox' }[type] || type;
+  return `<span class="badge ${cls}">${label}</span>`;
+}
+
+// ── Render helpers ─────────────────────────────────────────────────────────
+
+function renderBboxTable(bboxes) {
+  if (!bboxes || !bboxes.length) return '';
+  const rows = bboxes.map((b, i) => `
+    <tr>
+      <td>#${i + 1}</td>
+      <td>${b.x0.toFixed(2)}</td>
+      <td>${b.y0.toFixed(2)}</td>
+      <td>${b.x1.toFixed(2)}</td>
+      <td>${b.y1.toFixed(2)}</td>
+    </tr>`).join('');
+  return `
+    <table class="bbox-table">
+      <thead><tr><th>#</th><th>x0</th><th>y0</th><th>x1</th><th>y1</th></tr></thead>
+      <tbody>${rows}</tbody>
+    </table>`;
+}
+
+function renderEvidence(evList, uid) {
+  if (!evList || !evList.length) {
+    return `<div class="evidence-list" id="ev-${uid}"><em style="color:var(--text-muted);font-size:12px">No evidence</em></div>`;
+  }
+  const items = evList.map((ev, idx) => {
+    const bboxHtml = (ev.pdf_bboxes && ev.pdf_bboxes.length)
+      ? `<span class="bbox-toggle" onclick="toggleBbox(this)">▶ ${ev.pdf_bboxes.length} bounding box${ev.pdf_bboxes.length > 1 ? 'es' : ''}</span>
+         <div class="bbox-container">${renderBboxTable(ev.pdf_bboxes)}</div>`
+      : '';
+
+    const anchor = ev.anchor || {};
+    const anchorHtml = anchor.exact
+      ? `<div class="anchor-display">
+           <span class="anchor-prefix">${esc(anchor.prefix)}</span
+           ><span class="anchor-exact">${esc(anchor.exact)}</span
+           ><span class="anchor-suffix">${esc(anchor.suffix)}</span>
+         </div>`
+      : '';
+
+    const notes = ev.notes ? `<div style="margin-top:4px;font-size:11px;color:var(--text-muted)">${esc(ev.notes)}</div>` : '';
+
+    return `
+      <div class="ev-item">
+        <div class="ev-item-header">
+          ${evTypeBadge(ev.evidence_type)}
+          <span class="ev-page">p.${ev.page}</span>
+          <span class="ev-file" title="${esc(ev.source_filename)}">${esc(ev.source_filename)}</span>
+        </div>
+        <div class="ev-item-body">
+          ${anchorHtml}
+          ${bboxHtml}
+          ${notes}
+        </div>
+      </div>`;
+  }).join('');
+
+  return `<div class="evidence-list collapsed" id="ev-${uid}">${items}</div>`;
+}
+
+function renderValueItem(item, fieldIdx, valIdx) {
+  const uid = `f${fieldIdx}v${valIdx}`;
+  const evCount = (item.evidence || []).length;
+  const evBtnLabel = evCount === 0 ? 'No evidence' : `${evCount} evidence item${evCount !== 1 ? 's' : ''}`;
+  const evBtnDisabled = evCount === 0 ? 'style="opacity:0.5;cursor:default"' : '';
+
+  const valueDisplay = item.value != null
+    ? `<span class="value-text">${esc(item.value)}</span>`
+    : `<span class="value-text value-null">null / not found</span>`;
+
+  const flags = [];
+  if (item.requires_visual_extraction) flags.push(`<span class="badge badge-gray" title="Visual extraction required">Visual</span>`);
+  if (item.validation_errors && item.validation_errors.length) {
+    flags.push(`<span class="badge badge-failed" title="${esc(item.validation_errors.join(', '))}">⚠ ${item.validation_errors.length} error${item.validation_errors.length !== 1 ? 's' : ''}</span>`);
+  }
+
+  return `
+    <div class="value-item">
+      <div class="value-header" onclick="toggleEvidence('ev-${uid}', this)">
+        ${valueDisplay}
+        ${statusBadge(item.status)}
+        ${confBadge(item.confidence)}
+        ${flags.join('')}
+        <button class="ev-count-btn" ${evBtnDisabled}>${evBtnLabel} ▾</button>
+      </div>
+      ${renderEvidence(item.evidence, uid)}
+    </div>`;
+}
+
+function renderFieldCard(key, items, fieldIdx) {
+  const { num, label, raw } = parseFieldKey(key);
+  const statuses = items.map(i => i.status);
+  const allMissing = statuses.every(s => s === 'missing');
+  const anyExtracted = statuses.some(s => s === 'extracted');
+
+  const summaryBadges = [...new Set(statuses)].map(s => statusBadge(s)).join('');
+
+  const valuesHtml = items.map((item, vi) => renderValueItem(item, fieldIdx, vi)).join('');
+
+  return `
+    <div class="field-card" data-key="${esc(raw)}" data-status="${allMissing ? 'missing' : (anyExtracted ? 'extracted' : statuses[0] || '')}">
+      <div class="field-header" onclick="toggleField(this)">
+        <svg class="chevron open" viewBox="0 0 16 16" fill="currentColor">
+          <path d="M4.646 1.646a.5.5 0 0 1 .708 0l6 6a.5.5 0 0 1 0 .708l-6 6a.5.5 0 0 1-.708-.708L10.293 8 4.646 2.354a.5.5 0 0 1 0-.708z"/>
+        </svg>
+        ${num ? `<span class="field-number">${num}</span>` : ''}
+        <span class="field-label">${esc(label)}</span>
+        <span class="field-raw-key">${esc(raw)}</span>
+        <div class="field-badges">${summaryBadges}</div>
+      </div>
+      <div class="field-body">
+        ${valuesHtml}
+      </div>
+    </div>`;
+}
+
+// ── Main render ─────────────────────────────────────────────────────────────
+
+function renderReport(data) {
+  renderHeader(data);
+  renderStats(data);
+  renderFields(data);
+}
+
+function renderHeader(data) {
+  const el = document.getElementById('header-meta');
+  const parts = [];
+  if (data.report_type) parts.push(`<div class="meta-item"><span class="report-type-badge">${esc(data.report_type)}</span></div>`);
+  if (data.project_id)  parts.push(`<div class="meta-item">Project: <strong>${esc(data.project_id)}</strong></div>`);
+  if (data.scope_id)    parts.push(`<div class="meta-item">Scope: <strong>${esc(data.scope_id)}</strong></div>`);
+  if (data.generated_at) {
+    const d = new Date(data.generated_at);
+    parts.push(`<div class="meta-item">Generated: <strong>${d.toLocaleString()}</strong></div>`);
+  }
+  el.innerHTML = parts.join('') || '<div class="meta-item" style="color:#adbac7">No metadata</div>';
+}
+
+function renderStats(data) {
+  const items = Object.values(data.pca_data_items || {}).flat();
+  const totalFields = Object.keys(data.pca_data_items || {}).length;
+  const extracted = items.filter(i => i.status === 'extracted').length;
+  const missing   = items.filter(i => i.status === 'missing').length;
+  const totalEv   = items.reduce((s, i) => s + (i.evidence || []).length, 0);
+
+  document.getElementById('stats-bar').innerHTML = `
+    <div class="stat-card"><div class="stat-label">Fields</div><div class="stat-value blue">${totalFields}</div></div>
+    <div class="stat-card"><div class="stat-label">Extracted</div><div class="stat-value green">${extracted}</div></div>
+    <div class="stat-card"><div class="stat-label">Missing</div><div class="stat-value amber">${missing}</div></div>
+    <div class="stat-card"><div class="stat-label">Evidence Items</div><div class="stat-value purple">${totalEv}</div></div>`;
+}
+
+function renderFields(data) {
+  const container = document.getElementById('fields-container');
+  const items = data.pca_data_items || {};
+  const entries = Object.entries(items);
+
+  if (!entries.length) {
+    container.innerHTML = '<div class="empty">No fields found in pca_data_items.</div>';
+    return;
+  }
+
+  container.innerHTML = entries
+    .map(([key, vals], idx) => renderFieldCard(key, vals, idx))
+    .join('');
+}
+
+// ── Toggle handlers ────────────────────────────────────────────────────────
+
+function toggleField(header) {
+  const body = header.nextElementSibling;
+  const chevron = header.querySelector('.chevron');
+  body.classList.toggle('collapsed');
+  chevron.classList.toggle('open');
+}
+
+function toggleEvidence(id, headerEl) {
+  const list = document.getElementById(id);
+  if (!list) return;
+  const btn = headerEl.querySelector('.ev-count-btn');
+  if (list.children.length === 0) return; // no evidence
+  list.classList.toggle('collapsed');
+  if (btn) btn.textContent = btn.textContent.replace(/[▾▴]/, list.classList.contains('collapsed') ? '▾' : '▴');
+}
+
+function toggleBbox(toggle) {
+  const container = toggle.nextElementSibling;
+  container.classList.toggle('open');
+  toggle.textContent = toggle.textContent.replace(/[▶▼]/, container.classList.contains('open') ? '▼' : '▶');
+}
+
+function expandAll() {
+  document.querySelectorAll('.field-body.collapsed').forEach(el => el.classList.remove('collapsed'));
+  document.querySelectorAll('.chevron:not(.open)').forEach(el => el.classList.add('open'));
+}
+
+function collapseAll() {
+  document.querySelectorAll('.field-body:not(.collapsed)').forEach(el => el.classList.add('collapsed'));
+  document.querySelectorAll('.chevron.open').forEach(el => el.classList.remove('open'));
+  document.querySelectorAll('.evidence-list:not(.collapsed)').forEach(el => el.classList.add('collapsed'));
+}
+
+// ── Filter / search ────────────────────────────────────────────────────────
+
+let activeFilter = 'all';
+
+function setFilter(btn) {
+  document.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  activeFilter = btn.dataset.filter;
+  applyFilters();
+}
+
+function applyFilters() {
+  const q = document.getElementById('search-input').value.toLowerCase();
+  document.querySelectorAll('.field-card').forEach(card => {
+    const keyMatch = card.dataset.key.toLowerCase().includes(q);
+    // also search value text
+    const valueTexts = [...card.querySelectorAll('.value-text')].map(el => el.textContent.toLowerCase()).join(' ');
+    const textMatch = !q || keyMatch || valueTexts.includes(q);
+
+    const statusMatch = activeFilter === 'all' || card.dataset.status === activeFilter;
+    card.classList.toggle('hidden', !textMatch || !statusMatch);
+  });
+
+  const visible = document.querySelectorAll('.field-card:not(.hidden)').length;
+  const container = document.getElementById('fields-container');
+  let empty = container.querySelector('.empty-filter');
+  if (visible === 0) {
+    if (!empty) {
+      empty = document.createElement('div');
+      empty.className = 'empty empty-filter';
+      empty.textContent = 'No fields match the current filter.';
+      container.appendChild(empty);
+    }
+  } else if (empty) {
+    empty.remove();
+  }
+}
+
+// ── JSON panel ─────────────────────────────────────────────────────────────
+
+function toggleJsonPanel() {
+  const panel = document.getElementById('json-panel');
+  panel.classList.toggle('open');
+}
+
+function loadJson() {
+  const raw = document.getElementById('json-input').value.trim();
+  const errEl = document.getElementById('json-error');
+  errEl.textContent = '';
+  if (!raw) { errEl.textContent = 'Please paste JSON first.'; return; }
+  let data;
+  try {
+    data = JSON.parse(raw);
+  } catch (e) {
+    errEl.textContent = 'Invalid JSON: ' + e.message;
+    return;
+  }
+  if (!data.pca_data_items) {
+    errEl.textContent = 'Missing "pca_data_items" key.';
+    return;
+  }
+  document.getElementById('json-panel').classList.remove('open');
+  renderReport(data);
+}
+
+// ── Boot ───────────────────────────────────────────────────────────────────
+
+(function () {
+  const raw = document.getElementById('default-data').textContent;
+  const data = JSON.parse(raw);
+  renderReport(data);
+})();
+</script>
+</body>
+</html>
